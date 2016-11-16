@@ -127,11 +127,16 @@ $(document).ready(function () {
 <p>Using devices such as Jawbone Up, Nike FuelBand, and Fitbit it is now possible to collect a large amount of data about personal activity relatively inexpensively. These type of devices are part of the quantified self movement – a group of enthusiasts who take measurements about themselves regularly to improve their health, to find patterns in their behavior, or because they are tech geeks. One thing that people regularly do is quantify how much of a particular activity they do, but they rarely quantify how well they do it. In this project, your goal will be to use data from accelerometers on the belt, forearm, arm, and dumbell of 6 participants. They were asked to perform barbell lifts correctly and incorrectly in 5 different ways. More information is available from the website here: <a href="http://groupware.les.inf.puc-rio.br/har" class="uri">http://groupware.les.inf.puc-rio.br/har</a> (see the section on the Weight Lifting Exercise Dataset).</p>
 <div id="required-libraries" class="section level4">
 <h4>Required libraries</h4>
-<pre class="r"><code>library(caret)</code></pre>
+<pre class="r"><code>library(dplyr)
+library(randomForest)
+library(caret)</code></pre>
 </div>
 </div>
-<div id="obtaining-data" class="section level2">
-<h2>Obtaining data</h2>
+<div id="preparing-the-data" class="section level3">
+<h3>Preparing the data</h3>
+<p>Preparation of the data for processment</p>
+<div id="obtaining-data" class="section level4">
+<h4>Obtaining data</h4>
 <p>The training data for this project are available here:</p>
 <p><a href="https://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv">Training data</a></p>
 <p>The test data are available here:</p>
@@ -143,8 +148,22 @@ $(document).ready(function () {
 if(!file.exists(&quot;testing.csv&quot;))
   download.file(&quot;https://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv&quot;, &quot;testing.csv&quot;)
 
-training &lt;- read.csv(&quot;training.csv&quot;, na.strings = &quot;NA&quot;)
-testing &lt;- read.csv(&quot;testing.csv&quot;, na.strings = &quot;NA&quot;)</code></pre>
+#We considered &quot;NA&quot; and &quot;#DIV/0!&quot; as NA values.
+training &lt;- read.csv(&quot;training.csv&quot;, na.strings = c(&quot;NA&quot;,&quot;#DIV/0!&quot;))
+testing &lt;- read.csv(&quot;testing.csv&quot;, na.strings = c(&quot;NA&quot;,&quot;#DIV/0!&quot;))</code></pre>
+</div>
+<div id="data-cleaning" class="section level4">
+<h4>Data cleaning</h4>
+<p>Removed useless characteristics and columns without values. Considered variables that contains belt, arm or dumbbell predictors, and classe or problem as outcome. We removed columns that not contains any value.</p>
+<pre class="r"><code>training &lt;- training[,grepl(&quot;belt|arm|dumbbell|classe&quot;, names(training))]
+testing &lt;- testing[,grepl(&quot;belt|arm|dumbbell|problem&quot;, names(testing))]
+training &lt;- training[,colSums(is.na(training)) == 0]
+testing &lt;- testing[,colSums(is.na(testing)) == 0]</code></pre>
+<p>We create the partition using 75% as training and the remaining as testing.</p>
+<pre class="r"><code>inTrain &lt;- createDataPartition(y = training$classe, p = 3/4, list = FALSE)
+train &lt;- training[inTrain,]
+test &lt;- training[-inTrain,]</code></pre>
+</div>
 </div>
 
 
