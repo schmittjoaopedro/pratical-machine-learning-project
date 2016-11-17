@@ -14,6 +14,8 @@ Using devices such as Jawbone Up, Nike FuelBand, and Fitbit it is now possible t
 ```{r message=FALSE, results='hide', warning=FALSE}
 library(dplyr)
 library(randomForest)
+library(rpart)
+library(rattle)
 library(caret)
 ```
 
@@ -33,6 +35,8 @@ The test data are available here:
 
 The data for this project come from this source: http://groupware.les.inf.puc-rio.br/har. If you use the document you create for this class for any purpose please cite them as they have been very generous in allowing their data to be used for this kind of assignment.
 
+This project has the objective of simulated a model capable of predict possible outcomes based in colleted data.
+
 ```{r}
 if(!file.exists("training.csv"))
   download.file("https://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv", "training.csv")
@@ -47,7 +51,7 @@ testing <- read.csv("testing.csv", na.strings = c("NA","#DIV/0!"))
 
 #### Data cleaning
 
-Removed useless characteristics and columns without values. Considered variables that contains belt, arm or dumbbell predictors, and classe or problem as outcome. We removed columns that not contains any value.
+The first activity was remove useless characteristics and columns without values. Considered only variables that contains belt, arm or dumbbell as name for the predictors, and classe or problem as label for the outcome. After process variables by name, was removed all columns that contain all values null.
 
 ```{r}
 training <- training[,grepl("belt|arm|dumbbell|classe", names(training))]
@@ -60,6 +64,94 @@ We create the partition using 75% as training and the remaining as testing.
 
 ```{r}
 inTrain <- createDataPartition(y = training$classe, p = 3/4, list = FALSE)
-train <- training[inTrain,]
-test <- training[-inTrain,]
+trainingSet <- training[inTrain,]
+testingSet <- training[-inTrain,]
 ```
+
+### Predicting 
+
+All models were made using a crossfold validation with 3 folds. First was started with some simulations to find the best predictors, after that were used the most significative predictors to build the final model. Was used PCA to reduce the most significative predictors and was processed by hand the most significative predictors using correlation.
+
+#### Classification trees
+
+First model was did using recursive partitioning tree (rpart) and plotted the graph to show the decision tree.
+
+```{r fig.align='center', cache=TRUE}
+modRPART <- train(classe ~ ., 
+                  method = "rpart", 
+                  data = trainingSet, 
+                  trControl = trainControl(method = "cv", number = 3))
+fancyRpartPlot(modRPART$finalModel)
+```
+
+We observer that is a simple decision tree with low confidence, we can prove check the prediction and the confusion matrix.
+
+```{r}
+cmRPART <- confusionMatrix(predict(modRPART, testingSet), testingSet$classe)
+print(cmRPART)
+```
+
+We obtained a accuracy of `r round(cmRPART$overall[1] * 100, 2)`%. That is very low, lets try other model.
+
+#### Random forest
+
+Using random forest to predict the outcome with all predictors and default configurations:
+
+```{r cache=TRUE, fig.align='center'}
+rf <- randomForest(classe ~ ., data = trainingSet)
+cmRF <- confusionMatrix(predict(rf, testingSet), testingSet$classe)
+print(cmRF)
+```
+
+Now we achieved `r round(cmRF$overall[1] * 100, 2)`%. Very better than classification tree, but we can be getting some overfitting, lets try reduce some variables. Seeing the importance plot of the variables we can select the top 15 variables and remove the more correlated.
+
+```{r}
+relevantPrecitors <- names(rf$importance[order(rf$importance, decreasing = T),][1:10])
+varImpPlot(rf)
+```
+
+Based at the plot, we select the most important predictors: **`r relevantPrecitors`**, and reduce the dataset. After selected the most important predictors we calculated the correlation between theirs to evict overfitting with a correlation around 80%.
+
+```{r cache=TRUE}
+# Reducing the dataset
+redTrain <- trainingSet[,c("classe", relevantPrecitors)]
+redTest <- testingSet[,c("classe", relevantPrecitors)]
+# Checking the most correlated variables
+varCorr <- abs(cor(redTrain[,-1]))
+diag(varCorr) <- 0
+correlated <- which(varCorr > 0.8, arr.ind = T)
+print(correlated)
+```
+
+Base this we removed the index -2 **yaw_belt**, and generate a new model with randon forest.
+
+```{r cache=TRUE}
+relevantPrecitors <- relevantPrecitors[c(-2)]
+redTrain <- trainingSet[,c("classe", relevantPrecitors)]
+redTest <- testingSet[,c("classe", relevantPrecitors)]
+# Generate a new model
+modRFRed <- train(classe ~ ., 
+                method = "rf", 
+                data = redTrain,
+                trControl = trainControl(method = "cv", number = 3))
+cmRFRed <- confusionMatrix(predict(modRFRed, redTest), redTest$classe)
+print(cmRFRed)
+```
+
+Reducing to the most significative predictors, the result lead was `r round(cmRFRed$overall[1] * 100, 2)`% for a model very more simple with low lost of accuracy.
+
+Lets use PCA (Principal Component Analysis) to limit the explain of variation to around .75% to fit a new model with randon forest.
+
+```{r cache=TRUE, message=FALSE, warning=FALSE}
+ modRFPCA <- train(classe ~ ., 
+                method = "rf", 
+                data = trainingSet, 
+                preProcess = "pca",
+                trControl = trainControl(method = "cv", 
+                                        number = 3, 
+                                        preProcOptions = list(thresh = 0.8)))
+cmRFPCA <- confusionMatrix(predict(modRFPCA, testingSet), testingSet$classe)
+print(cmRFPCA)
+```
+
+We lost some accuracy `r round(cmRFPCA$overall[1] * 100, 2)` but we simply the model with less variables.
