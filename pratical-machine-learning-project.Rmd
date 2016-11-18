@@ -35,7 +35,7 @@ The test data are available here:
 
 The data for this project come from this source: http://groupware.les.inf.puc-rio.br/har. If you use the document you create for this class for any purpose please cite them as they have been very generous in allowing their data to be used for this kind of assignment.
 
-This project has the objective of simulated a model capable of predict possible outcomes based in colleted data.
+This project has the objective of simulated a model capable of predict possible outcomes based in collected data.
 
 ```{r}
 if(!file.exists("training.csv"))
@@ -51,7 +51,7 @@ testing <- read.csv("testing.csv", na.strings = c("NA","#DIV/0!"))
 
 #### Data cleaning
 
-The first activity was remove useless characteristics and columns without values. Considered only variables that contains belt, arm or dumbbell as name for the predictors, and classe or problem as label for the outcome. After process variables by name, was removed all columns that contain all values null.
+The first thing was remove the useless characteristics and columns without values. Considered only variables that contains *belt*, *arm* or *dumbbell* as name for the predictors, and *classe* or *problem* as label for the outcome. After that, was processed variables by removing all columns that contain all values null.
 
 ```{r}
 training <- training[,grepl("belt|arm|dumbbell|classe", names(training))]
@@ -60,7 +60,7 @@ training <- training[,colSums(is.na(training)) == 0]
 testing <- testing[,colSums(is.na(testing)) == 0]
 ```
 
-We create the partition using 75% as training and the remaining as testing.
+Was created the partition using 75% as training and the remaining as testing.
 
 ```{r}
 inTrain <- createDataPartition(y = training$classe, p = 3/4, list = FALSE)
@@ -70,11 +70,11 @@ testingSet <- training[-inTrain,]
 
 ### Predicting 
 
-All models were made using a crossfold validation with 3 folds. First was started with some simulations to find the best predictors, after that were used the most significative predictors to build the final model. Was used PCA to reduce the most significative predictors and was processed by hand the most significative predictors using correlation.
+All models were made using a crossfold validation with 3 breaks in the training set, we use a low value to get more bias but less variance. The first time was started with some simulations to find the best predictors, after were used the most significative predictors to build the final model. Was used PCA to reduce the most significative predictors and was removed by hand the most significative predictors with correlation upper than 80%.
 
 #### Classification trees
 
-First model was did using recursive partitioning tree (rpart) and plotted the graph to show the decision tree.
+The first model was did using recursive partitioning tree (rpart), after was plotted the graph to show the decision tree.
 
 ```{r fig.align='center', cache=TRUE}
 modRPART <- train(classe ~ ., 
@@ -84,18 +84,18 @@ modRPART <- train(classe ~ .,
 fancyRpartPlot(modRPART$finalModel)
 ```
 
-We observer that is a simple decision tree with low confidence, we can prove check the prediction and the confusion matrix.
+We observed that the simple decision tree has low confidence, we can prove this checking the confusion matrix.
 
 ```{r}
 cmRPART <- confusionMatrix(predict(modRPART, testingSet), testingSet$classe)
 print(cmRPART)
 ```
 
-We obtained a accuracy of `r round(cmRPART$overall[1] * 100, 2)`%. That is very low, lets try other model.
+In Accuracy we had obtained around `r round(cmRPART$overall[1] * 100, 2)`%. A very low accuracy. The next step is use another algorithm of classification.
 
 #### Random forest
 
-Using random forest to predict the outcome with all predictors and default configurations:
+Was used the Random Forest algorithm to predict the classe outcome with all other variables as predictors, after that, we predict the training set and plot a confusion matrix to show the accuracy of the model:
 
 ```{r cache=TRUE, fig.align='center'}
 rf <- randomForest(classe ~ ., data = trainingSet)
@@ -103,14 +103,14 @@ cmRF <- confusionMatrix(predict(rf, testingSet), testingSet$classe)
 print(cmRF)
 ```
 
-Now we achieved `r round(cmRF$overall[1] * 100, 2)`%. Very better than classification tree, but we can be getting some overfitting, lets try reduce some variables. Seeing the importance plot of the variables we can select the top 15 variables and remove the more correlated.
+Now we achieved `r round(cmRF$overall[1] * 100, 2)`%, very better than classification tree, but now we can be getting some overfitting because we are using all variables as predictors, lets try reduce some variables. To see the most relevant variables we plot the importance plot order descencending and we select the top 15 variables to remove the more correlated.
 
 ```{r}
 relevantPrecitors <- names(rf$importance[order(rf$importance, decreasing = T),][1:10])
 varImpPlot(rf)
 ```
 
-Based at the plot, we select the most important predictors: **`r relevantPrecitors`**, and reduce the dataset. After selected the most important predictors we calculated the correlation between theirs to evict overfitting with a correlation around 80%.
+Based in the plot, we select the most important predictors: **`r relevantPrecitors`**, and reduce the dataset. After selected the most important predictors we calculated the correlation between theirs to evict overfitting with a correlation around 80%.
 
 ```{r cache=TRUE}
 # Reducing the dataset
@@ -123,7 +123,7 @@ correlated <- which(varCorr > 0.8, arr.ind = T)
 print(correlated)
 ```
 
-Base this we removed the index -2 **yaw_belt**, and generate a new model with randon forest.
+Based this was removed the index -2 **yaw_belt**, and was generated a new model with random forest using the selected variables. After that, was predicted the testing set and did a confusion matrix to get the accuracy.
 
 ```{r cache=TRUE}
 relevantPrecitors <- relevantPrecitors[c(-2)]
@@ -138,9 +138,11 @@ cmRFRed <- confusionMatrix(predict(modRFRed, redTest), redTest$classe)
 print(cmRFRed)
 ```
 
-Reducing to the most significative predictors, the result lead was `r round(cmRFRed$overall[1] * 100, 2)`% for a model very more simple with low lost of accuracy.
+Reducing the most significative predictors, the result lead was `r round(cmRFRed$overall[1] * 100, 2)`% for a model very more simple with low lost of accuracy.
 
-Lets use PCA (Principal Component Analysis) to limit the explain of variation to around .75% to fit a new model with randon forest.
+#### Using PCA
+
+Was modeled a new model with PCA (Principal Component Analysis) to compare with the last model, was used PCA to limit the explain of variation to around 80% to fit a new model with random forest. After that, was predicted the testing set and produced a confusion matrix to gets the accuracy.
 
 ```{r cache=TRUE, message=FALSE, warning=FALSE}
  modRFPCA <- train(classe ~ ., 
@@ -154,4 +156,32 @@ cmRFPCA <- confusionMatrix(predict(modRFPCA, testingSet), testingSet$classe)
 print(cmRFPCA)
 ```
 
-We lost some accuracy `r round(cmRFPCA$overall[1] * 100, 2)` but we simply the model with less variables.
+Was lost some accuracy `r round(cmRFPCA$overall[1] * 100, 2)` but was simplified the model with less variables. With base in the generated models, was selected the model with manual selection of variables, due the accuracy to predict the testing challenge.
+
+### Predicting the testing set
+
+The test set was predicted with the model with the predictors reduced manually. With the selected model the out of error sample was `r round((1 - cmRFRed$overall[1]) * 100, 2)`%, indicating a good model based on the prediction.
+
+```{r results="asis"}
+# Predicted the results
+result <- predict(modRFRed, testing)
+# Generated a data frame
+dataTable <- data.frame("Problem" = testing$problem_id, "Classe" = result)
+# Create a table of the results
+library(pander)
+pandoc.table(dataTable)
+```
+
+And to finish the result was written in files named by the problem with the predited result.
+
+```{r}
+dir.create("result")
+for(i in 1:length(result)){
+    filename = paste0("result/problem_", testing$problem_id[i] ,".txt")
+    write.table(result[i], 
+                file=filename, 
+                quote=FALSE, 
+                row.names=FALSE, 
+                col.names=FALSE)
+}
+```
